@@ -1,6 +1,6 @@
 #!/bin/sh
 #-
-# Copyright (c) 2021-2022 Franco Fichtner <franco@opnsense.org>
+# Copyright (c) 2021-2026 Franco Fichtner <franco@opnsense.org>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -73,6 +73,8 @@ if ! dialog --backtitle "OPNsense Installer" --title "UFS Configuration" \
     "Last Chance! Are you sure you want to destroy the current contents of the following disks:\n\n    ${DISK}\n\n" 0 0; then
 	exit 1
 fi
+
+gpart destroy -F ${DISK} || fatal "Partition destroy failed"
 
 bsdinstall scriptedpart ${DISK} gpt { ${SIZE_EFI} efi, ${SIZE_BOOT} freebsd-boot, ${SIZE_ROOT} freebsd-ufs /${ARGS_SWAP} } || \
     fatal "The partition editor run failed"
