@@ -74,7 +74,8 @@ if ! dialog --backtitle "OPNsense Installer" --title "UFS Configuration" \
 	exit 1
 fi
 
-gpart destroy -F ${DISK} || fatal "Partition destroy failed"
+# apparently returns error if already destroyed so do not check
+gpart destroy -F ${DISK}
 
 bsdinstall scriptedpart ${DISK} gpt { ${SIZE_EFI} efi, ${SIZE_BOOT} freebsd-boot, ${SIZE_ROOT} freebsd-ufs /${ARGS_SWAP} } || \
     fatal "The partition editor run failed"
