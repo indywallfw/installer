@@ -69,8 +69,6 @@ progress()
 }
 
 ITEMS="
-.cshrc
-.profile
 COPYRIGHT
 bin
 boot
@@ -88,10 +86,8 @@ root
 sbin
 sys
 usr/bin
-usr/games
 usr/include
 usr/lib
-usr/lib32
 usr/libdata
 usr/libexec
 %%usr/local%%
