@@ -26,6 +26,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
+#
 ############################################################ INCLUDES
 
 BSDCFG_SHARE="/usr/share/bsdconfig"
@@ -35,18 +36,37 @@ f_include $BSDCFG_SHARE/dialog.subr
 ############################################################ GLOBALS
 
 #
+# List of environment variables that may be defined by the user, but modified
+# during the installation process. They are then restored when restarting this
+# script.
+#
+user_env_vars="BSDINSTALL_DISTSITE DISTRIBUTIONS WORKAROUND_GPTACTIVE WORKAROUND_LENOVO ZFSBOOT_PARTITION_SCHEME"
+
+#
 # Strings that should be moved to an i18n file and loaded with f_include_lang()
 #
 hline_arrows_tab_enter="Press arrows, TAB or ENTER"
 hline_arrows_tab_space_enter="Press arrows, TAB, SPACE or ENTER"
 msg_abort="Abort"
+msg_an_installation_step_has_been_aborted="An installation step has been aborted. Would you like\nto restart the installation or exit the installer?"
+msg_auto_ufs="Auto (UFS)"
+msg_auto_ufs_desc="Guided UFS Disk Setup"
+msg_auto_ufs_help="Choose which disk to setup using UFS and standard partition layout"
+msg_auto_zfs="Auto (ZFS)"
+msg_auto_zfs_desc="Guided Root-on-ZFS"
+msg_auto_zfs_help="Choose which disk to setup using ZFS and standard partition layout"
 msg_exit="Exit"
-msg_freebsd_installer="OPNsense Installer"
+msg_freebsd_installer="$OSNAME Installer"
 msg_gpt_active_fix="Your hardware is known to have issues booting in CSM/Legacy/BIOS mode from GPT partitions that are not set active. Would you like the installer to apply this workaround for you?"
 msg_lenovo_fix="Your model of Lenovo is known to have a BIOS bug that prevents it booting from GPT partitions without UEFI. Would you like the installer to apply a workaround for you?"
-msg_an_installation_step_has_been_aborted="An installation step has been aborted. Would you like\nto restart the installation or exit the installer?"
+msg_manual="Manual"
+msg_manual_desc="Manual Disk Setup (experts)"
+msg_manual_help="Create customized partitions from menu options"
 msg_no="NO"
 msg_restart="Restart"
+msg_shell="Shell"
+msg_shell_desc="Open a shell and partition by hand"
+msg_shell_help="Create customized partitions using command-line utilities"
 msg_yes="YES"
 
 ############################################################ FUNCTIONS
@@ -54,34 +74,35 @@ msg_yes="YES"
 # error [$msg]
 #
 # Display generic error message when a script fails. An optional message
-# argument can preceed the generic message. User is given the choice of
+# argument can precede the generic message. User is given the choice of
 # restarting the installer or exiting.
 #
 error()
 {
-       local title="$msg_abort"
-       local btitle="$msg_freebsd_installer"
-       local prompt="${1:+$1\n\n}$msg_an_installation_step_has_been_aborted"
-       local hline="$hline_arrows_tab_space_enter"
+	local title="$msg_abort"
+	local btitle="$msg_freebsd_installer"
+	local prompt="${1:+$1\n\n}$msg_an_installation_step_has_been_aborted"
+	local hline="$hline_arrows_tab_space_enter"
 
-       [ -f "$PATH_FSTAB" ] && bsdinstall umount
+	[ -f "$PATH_FSTAB" ] && bsdinstall umount
 
-       local height width
-       f_dialog_buttonbox_size height width \
-               "$title" "$btitle" "$prompt" "$hline"
+	local height width
+	f_dialog_buttonbox_size height width \
+		"$title" "$btitle" "$prompt" "$hline"
 
-       if $DIALOG \
-               --title "$title"           \
-               --backtitle "$btitle"      \
-               --hline "$hline"           \
-               --no-label "$msg_exit"     \
-               --yes-label "$msg_restart" \
-               --yesno "$prompt" $height $width
-       then
-               exec $0
-               # NOTREACHED
-       fi
-       exit 1
+	if $DIALOG \
+		--title "$title"	    \
+		--backtitle "$btitle"      \
+		--hline "$hline"	    \
+		--no-label "$msg_exit"     \
+		--yes-label "$msg_restart" \
+		--yesno "$prompt" $height $width
+	then
+		environment_restore
+		exec $0
+		# NOTREACHED
+	fi
+	exit 1
 }
 
 # dialog_workaround
@@ -117,18 +138,43 @@ dialog_workaround()
 	prompt=$( printf "$format" )
 	f_dprintf "%s: Workaround prompt" "$0"
 	$DIALOG \
-		--title "$title"        \
+		--title "$title"	 \
 		--backtitle "$btitle"   \
-		--hline "$hline"        \
+		--hline "$hline"	 \
 		--$yes-label "$msg_yes" \
 		--$no-label "$msg_no"   \
-		$extra_args             \
+		$extra_args	      \
 		--yesno "$prompt" $height $width
+}
+
+# environment_restore
+#
+# Restore a list of environment variables when this script is restarted.
+#
+environment_restore()
+{
+	for var in $user_env_vars; do
+		eval "if [ -n \"\${ORIG_$var}\" -o -z \"\${ORIG_$var-z}\" ]; then $var=\${ORIG_$var}; else unset $var; fi"
+	done
+}
+
+# environment_save
+#
+# Save any user-defined environment variable that may be modified during the
+# installation process. They are then restored when restarting this script.
+#
+environment_save()
+{
+	for var in $user_env_vars; do
+		eval "if [ -n \"\${$var}\" -o -z \"\${$var-z}\" ]; then ORIG_$var=\${$var}; else unset ORIG_$var; fi"
+	done
 }
 
 ############################################################ MAIN
 
 f_dprintf "Began Installation at %s" "$( date )"
+
+environment_save
 
 PRODUCT_NAME=$(opnsense-version -N)
 PRODUCT_VERSION=$(opnsense-version -V)
@@ -136,8 +182,20 @@ PRODUCT_VERSION=$(opnsense-version -V)
 rm -rf $BSDINSTALL_TMPETC
 mkdir $BSDINSTALL_TMPETC
 
-trap true SIGINT	# This section is optional
+# Reset the ESP list
+: > ${TMPDIR:-"/tmp"}/bsdinstall-esps
 
+# With pkgbase, pkg OOM has been observed with QEMU-default 128 MiB memory size.
+# Ensure we have at least about 256 MiB (with an allowance for rounding etc.).
+physmem=$(($(sysctl -n hw.physmem) / 1048576))
+if [ $physmem -lt 200 ]; then
+	 bsddialog --backtitle "$OSNAME Installer" --title "Warning" \
+	    --msgbox "Insufficient physical memory (${physmem} MiB) detected. At least 256 MiB is recommended. The installer or installed system may not function correctly." 0 0
+fi
+
+[ -f /usr/libexec/bsdinstall/local.pre-everything ] && f_dprintf "Running local.pre-everything" && sh /usr/libexec/bsdinstall/local.pre-everything "$BSDINSTALL_CHROOT"
+
+trap true SIGINT	# This section is optional
 [ -z "${BSDINSTALL_KEYMAP_DONE}" ] && bsdinstall keymap
 export BSDINSTALL_KEYMAP_DONE=1
 
@@ -145,6 +203,8 @@ trap error SIGINT	# Catch cntrl-C here
 
 rm -f $PATH_FSTAB
 touch $PATH_FSTAB
+
+[ -f /usr/libexec/bsdinstall/local.pre-partition ] && f_dprintf "Running local.pre-partition" && sh /usr/libexec/bsdinstall/local.pre-partition "$BSDINSTALL_CHROOT"
 
 #
 # Try to detect known broken platforms and apply their workarounds
@@ -340,10 +400,14 @@ esac
 
 done
 
+[ -f /usr/libexec/bsdinstall/local.pre-fetch ] && f_dprintf "Running local.pre-fetch" && sh /usr/libexec/bsdinstall/local.pre-fetch "$BSDINSTALL_CHROOT"
+
 bsdinstall opnsense-install || error "Failed to install"
 
 # Set up boot loader
 bsdinstall bootconfig || error "Failed to configure bootloader"
+
+[ -f /usr/libexec/bsdinstall/local.pre-configure ] && f_dprintf "Running local.pre-configure" && sh /usr/libexec/bsdinstall/local.pre-configure "$BSDINSTALL_CHROOT"
 
 trap true SIGINT	# This section is optional
 
@@ -368,6 +432,8 @@ finalconfig() {
 finalconfig
 
 trap error SIGINT	# SIGINT is bad again
+
+[ -f /usr/libexec/bsdinstall/local.post-configure ] && f_dprintf "Running local.post-configure" && sh /usr/libexec/bsdinstall/local.post-configure "$BSDINSTALL_CHROOT"
 
 # Only handle keymap here as we try to achieve the other
 # requirements via automatic config generation at runtime
