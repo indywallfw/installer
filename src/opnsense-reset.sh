@@ -35,17 +35,17 @@ PASSOK=
 
 [ -z "${OPNSENSE_SDISKS}${OPNSENSE_SPOOLS}" ] && opnsense_fatal "Reset Password" "No suitable disks found in the system"
 
-exec 3>&1
-DISK=`echo ${OPNSENSE_SDISKS} ${OPNSENSE_SPOOLS} | xargs dialog --backtitle "OPNsense Installer" \
+exec 5>&1
+DISK=`echo ${OPNSENSE_SDISKS} ${OPNSENSE_SPOOLS} | xargs -o bsddialog --backtitle "OPNsense Installer" \
 	--title "Reset Password" --cancel-label "Cancel" \
 	--menu "Please select a disk to continue." \
-	0 0 0 2>&1 1>&3` || exit 1
-exec 3>&-
+	0 0 0 2>&1 1>&5` || exit 1
+exec 5>&-
 
 [ -z "${DISK}" ] && opnsense_fatal "Reset Password" "No valid disk was selected"
 
 while [ -z "${PASSIN}" ]; do
-	if ! dialog --backtitle "OPNsense Installer" --title "Reset Password" --clear --insecure "${@}" \
+	if ! bsddialog --backtitle "OPNsense Installer" --title "Reset Password" --clear --insecure "${@}" \
 	    --passwordbox "Please select a password for the\nsystem management account (root):" 9 40 2> ${PASS1}; then
 	    exit 0
 	fi
@@ -53,7 +53,7 @@ while [ -z "${PASSIN}" ]; do
 done
 
 while [ -z "${PASSOK}" ]; do
-	if ! dialog --backtitle "OPNsense Installer" --title "Reset Password" --clear --insecure "${@}" \
+	if ! bsddialog --backtitle "OPNsense Installer" --title "Reset Password" --clear --insecure "${@}" \
 	    --passwordbox "Please confirm the password for the\nsystem management account (root):" 9 40 2> ${PASS2}; then
 	    exit 0
 	fi
@@ -67,7 +67,7 @@ if diff -q ${PASS1} ${PASS2}; then
 		opnsense_fatal "Reset Password" "Password reset failed"
 	fi
 else
-	dialog --backtitle "OPNsense Installer" --title "Reset Password" "${@}" \
+	bsddialog --backtitle "OPNsense Installer" --title "Reset Password" "${@}" \
 	    --ok-label "Back" --msgbox "The entered passwords did not match." 5 40
 fi
 

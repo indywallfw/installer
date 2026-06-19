@@ -30,12 +30,12 @@ opnsense_load_disks
 
 [ -z "${OPNSENSE_SDISKS}${OPNSENSE_SPOOLS}" ] && opnsense_fatal "Import Configuration" "No suitable disks found in the system"
 
-exec 3>&1
-DISK=`echo ${OPNSENSE_SDISKS} ${OPNSENSE_SPOOLS} | xargs dialog --backtitle "OPNsense Installer" \
+exec 5>&1
+DISK=`echo ${OPNSENSE_SDISKS} ${OPNSENSE_SPOOLS} | xargs -o bsddialog --backtitle "OPNsense Installer" \
 	--title "Import Configuration" --cancel-label "Cancel" \
 	--menu "Please select a disk to continue." \
-	0 0 0 2>&1 1>&3` || exit 1
-exec 3>&-
+	0 0 0 2>&1 1>&5` || exit 1
+exec 5>&-
 
 [ -z "${DISK}" ] && opnsense_fatal "Import Configuration" "No valid disk was selected"
 

@@ -38,10 +38,10 @@ fatal()
 	# reverse log to show abort reason on top
 	tail -r ${LOGFILE} > ${LOGTEMP}
 
-	dialog --clear --backtitle "OPNsense Installer" \
+	bsddialog --clear --backtitle "OPNsense Installer" \
 	    --title "Installation Error" --textbox ${LOGTEMP} 22 77
 
-	dialog --backtitle "OPNsense Installer" --title "Installation Abort" \
+	bsddialog --backtitle "OPNsense Installer" --title "Installation Abort" \
 	    --no-label "Abort" --yes-label "Continue" --yesno \
 	    "An installation error occurred. Would you like to attempt to continue the installation anyway?" 0 0
 
@@ -60,7 +60,7 @@ progress()
 	[ "${MTREE}" -ge 0 ] && MTREEL="-${MTREE}"
 	[ "${BOOTL}" -ge 0 ] && BOOTL="-${BOOT}"
 
-	dialog --backtitle "OPNsense Installer" \
+	bsddialog --backtitle "OPNsense Installer" \
 	    --title "Installation Progress" "${@}" \
 	    --mixedgauge "" 0 0 ${ALL} \
 	    "Cloning current system"    "${CPDUPL}" \

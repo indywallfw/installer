@@ -325,12 +325,12 @@ ${CHOICESZFS}\"Install (UFS)\" \"UFS GPT/UEFI Hybrid\" \
 
 while :; do
 
-exec 3>&1
-CHOICE=`echo ${CHOICES} | xargs dialog --backtitle "OPNsense Installer" \
+exec 5>&1
+CHOICE=`echo ${CHOICES} | xargs -o bsddialog --backtitle "OPNsense Installer" \
 	--title "${PRODUCT_NAME} ${PRODUCT_VERSION}" --cancel-label "Exit" \
 	--menu "Choose one of the following tasks to perform." \
-	0 0 0 2>&1 1>&3` || exit 1
-exec 3>&-
+	0 0 0 2>&1 1>&5` || exit 1
+exec 5>&-
 
 case "${CHOICE}" in
 "Install (UFS)")
@@ -346,12 +346,12 @@ case "${CHOICE}" in
 	break
 	;;
 "Other Modes >>")
-	exec 3>&1
-	PARTMODE=`echo ${PMODES} | xargs dialog --backtitle "OPNsense Installer" \
+	exec 5>&1
+	PARTMODE=`echo ${PMODES} | xargs -o bsddialog --backtitle "OPNsense Installer" \
 	--title "Select Task" --cancel-label "Back" \
 	--menu "Choose one of the following tasks to perform." \
-	0 0 0 2>&1 1>&3` || PARTMODE=Exit
-	exec 3>&-
+	0 0 0 2>&1 1>&5` || PARTMODE=Exit
+	exec 5>&-
 
 	case "${PARTMODE}" in
 	"Auto (UFS)")	# Guided
@@ -412,13 +412,13 @@ bsdinstall bootconfig || error "Failed to configure bootloader"
 trap true SIGINT	# This section is optional
 
 finalconfig() {
-	exec 3>&1
-	REVISIT=$(dialog --backtitle "OPNsense Installer" \
+	exec 5>&1
+	REVISIT=$(bsddialog --backtitle "OPNsense Installer" \
 	    --title "Final Configuration" --no-cancel --menu \
 	    "Setup of your ${PRODUCT_NAME} system is nearly complete." 0 0 0 \
 		"Root Password" "Change root password" \
-		"Complete Install" "Confirm and exit" 2>&1 1>&3)
-	exec 3>&-
+		"Complete Install" "Confirm and exit" 2>&1 1>&5)
+	exec 5>&-
 
 	case "$REVISIT" in
 	"Root Password")
@@ -447,13 +447,13 @@ bsdinstall umount
 f_dprintf "Installation Completed at %s" "$( date )"
 
 powerconfig() {
-	exec 3>&1
-	REVISIT=$(dialog --backtitle "OPNsense Installer" \
+	exec 5>&1
+	REVISIT=$(bsddialog --backtitle "OPNsense Installer" \
 	    --title "Installation Complete" --no-cancel --menu \
 	    "The system may boot back into the installation media when not ejected properly." 0 0 0 \
 		"Reboot now" "Reboot system" \
-		"Halt now" "Power down system" 2>&1 1>&3)
-	exec 3>&-
+		"Halt now" "Power down system" 2>&1 1>&5)
+	exec 5>&-
 
 	case "$REVISIT" in
 	"Halt now")
