@@ -1,6 +1,6 @@
 #!/bin/sh
 #-
-# Copyright (c) 2021 Franco Fichtner <franco@opnsense.org>
+# Copyright (c) 2021-2026 Franco Fichtner <franco@opnsense.org>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -52,20 +52,12 @@ fatal()
 
 progress()
 {
-	local CPDUPL=${CPDUP}
-	local MTREEL=${MTREE}
-	local BOOTL=${BOOT}
-
-	[ "${CPDUP}" -ge 0 ] && CPDUPL="-${CPDUP}"
-	[ "${MTREE}" -ge 0 ] && MTREEL="-${MTREE}"
-	[ "${BOOTL}" -ge 0 ] && BOOTL="-${BOOT}"
-
 	bsddialog --backtitle "OPNsense Installer" \
-	    --title "Installation Progress" "${@}" \
-	    --mixedgauge "" 0 0 ${ALL} \
-	    "Cloning current system"    "${CPDUPL}" \
-	    "Verifying resulting files" "${MTREEL}" \
-	    "Preparing target system"   "${BOOTL}"
+	    --title "Installation Progress" \
+	    --mixedgauge "" 0 0 ${ALL} -- \
+	    "Cloning current system"    "${CPDUP}" \
+	    "Verifying resulting files" "${MTREE}" \
+	    "Preparing target system"   "${BOOT}"
 }
 
 ITEMS="
@@ -117,7 +109,7 @@ CPDUP_CUR=0
 CPDUP_MAX=$(echo "${ITEMS}" | wc -l)
 MTREE=
 
-progress "${@}"
+progress
 
 for ITEM in ${ITEMS}; do
 	CPDUP_LAST=${CPDUP}
@@ -131,7 +123,7 @@ for ITEM in ${ITEMS}; do
 	CPDUP_CUR=$((CPDUP_CUR + 1))
 
 	if [ "${CPDUP}" != "${CPDUP_LAST}" ]; then
-		progress "${@}"
+		progress
 	fi
 
 	if [ -e /${ITEM} -o -L /${ITEM} ]; then
@@ -143,9 +135,9 @@ done
 
 CPDUP=100
 ALL=80
-MTREE="In Progress"
+MTREE=-8
 
-progress "${@}"
+progress
 
 if [ -f /etc/installed_filesystem.mtree ]; then
 	rm ${BSDINSTALL_CHROOT}/etc/installed_filesystem.mtree
@@ -154,11 +146,11 @@ if [ -f /etc/installed_filesystem.mtree ]; then
 	fi
 fi
 
-MTREE=Completed
-BOOT="In Progress"
+MTREE=-4
+BOOT=-8
 ALL=90
 
-progress "${@}"
+progress
 
 if ! (mount -t devfs devfs ${BSDINSTALL_CHROOT}/dev 2>&1) >> ${LOGFILE}; then
 	fatal
@@ -183,6 +175,6 @@ cp ${LOGFILE} ${BSDINSTALL_CHROOT}${LOGFILE}
 sync
 
 ALL=100
-BOOT=Completed
+BOOT=-4
 
-progress "${@}"
+progress
