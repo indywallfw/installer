@@ -417,12 +417,17 @@ finalconfig() {
 	    --title "Final Configuration" --no-cancel --menu \
 	    "Setup of your ${PRODUCT_NAME} system is nearly complete." 0 0 0 \
 		"Root Password" "Change root password" \
+		"GeoIP Database" "MaxMind key for country blocking" \
 		"Complete Install" "Confirm and exit" 2>&1 1>&5)
 	exec 5>&-
 
 	case "$REVISIT" in
 	"Root Password")
 		bsdinstall opnsense-rootpass
+		finalconfig
+		;;
+	"GeoIP Database")
+		bsdinstall opnsense-geoip
 		finalconfig
 		;;
 	esac
