@@ -39,26 +39,26 @@ DOMAININ=${CURRENT#* }
 ANSWER=$(mktemp /tmp/hostname.XXXXXX)
 
 while :; do
-	if ! bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" --clear "${@}" \
+	if ! bsddialog --backtitle "Indywall Installer" --title "${TITLE}" --clear "${@}" \
 	    --inputbox "Host name (letters, digits and hyphens):" 9 56 "${HOSTIN}" 2> ${ANSWER}; then
 		rm -f ${ANSWER}
 		exit 0
 	fi
 	HOSTIN=$(cat ${ANSWER})
 	echo "${HOSTIN}" | grep -Eqx "${HOSTRE}" && break
-	bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" "${@}" --ok-label "Back" \
+	bsddialog --backtitle "Indywall Installer" --title "${TITLE}" "${@}" --ok-label "Back" \
 	    --msgbox "\"${HOSTIN}\" is not a valid host name." 6 50
 done
 
 while :; do
-	if ! bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" --clear "${@}" \
+	if ! bsddialog --backtitle "Indywall Installer" --title "${TITLE}" --clear "${@}" \
 	    --inputbox "Domain (e.g. internal or example.com):" 9 56 "${DOMAININ}" 2> ${ANSWER}; then
 		rm -f ${ANSWER}
 		exit 0
 	fi
 	DOMAININ=$(cat ${ANSWER})
 	echo "${DOMAININ}" | grep -Eqx "(${HOSTRE}\.)*${HOSTRE}" && break
-	bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" "${@}" --ok-label "Back" \
+	bsddialog --backtitle "Indywall Installer" --title "${TITLE}" "${@}" --ok-label "Back" \
 	    --msgbox "\"${DOMAININ}\" is not a valid domain." 6 50
 done
 
@@ -77,5 +77,5 @@ echo "The system is now named {$argv[1]}.{$argv[2]}.";
 EOF
 )
 
-bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" "${@}" \
+bsddialog --backtitle "Indywall Installer" --title "${TITLE}" "${@}" \
     --msgbox "${RESULT}" 7 60

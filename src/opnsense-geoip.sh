@@ -33,7 +33,7 @@ SETUP=/usr/local/opnsense/scripts/indywall/geoip_setup.php
 TITLE="GeoIP Database"
 
 if [ ! -x "${BSDINSTALL_CHROOT}${SETUP}" ]; then
-	bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" "${@}" \
+	bsddialog --backtitle "Indywall Installer" --title "${TITLE}" "${@}" \
 	    --msgbox "The Indywall plugin is not part of this image." 5 50
 	exit 0
 fi
@@ -44,7 +44,7 @@ ACCOUNTIN=
 KEYIN=
 
 while [ -z "${ACCOUNTIN}" ]; do
-	if ! bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" --clear "${@}" \
+	if ! bsddialog --backtitle "Indywall Installer" --title "${TITLE}" --clear "${@}" \
 	    --inputbox "Country blocking uses the free MaxMind GeoLite2\ndatabase (sign up at maxmind.com).\n\nMaxMind account ID:" 12 56 2> ${ACCOUNT}; then
 		rm -f ${ACCOUNT} ${KEY}
 		exit 0
@@ -53,7 +53,7 @@ while [ -z "${ACCOUNTIN}" ]; do
 done
 
 while [ -z "${KEYIN}" ]; do
-	if ! bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" --clear --insecure "${@}" \
+	if ! bsddialog --backtitle "Indywall Installer" --title "${TITLE}" --clear --insecure "${@}" \
 	    --passwordbox "MaxMind license key\n(Account > Manage License Keys):" 9 56 2> ${KEY}; then
 		rm -f ${ACCOUNT} ${KEY}
 		exit 0
@@ -67,5 +67,5 @@ RESULT=$( (cat ${KEY}; echo) | chroot ${BSDINSTALL_CHROOT} ${SETUP} \
 
 rm -f ${ACCOUNT} ${KEY}
 
-bsddialog --backtitle "OPNsense Installer" --title "${TITLE}" "${@}" \
+bsddialog --backtitle "Indywall Installer" --title "${TITLE}" "${@}" \
     --msgbox "${RESULT}" 8 60

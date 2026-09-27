@@ -38,10 +38,10 @@ fatal()
 	# reverse log to show abort reason on top
 	tail -r ${LOGFILE} > ${LOGTEMP}
 
-	bsddialog --clear --backtitle "OPNsense Installer" \
+	bsddialog --clear --backtitle "Indywall Installer" \
 	    --title "Installation Error" --textbox ${LOGTEMP} 22 77
 
-	bsddialog --backtitle "OPNsense Installer" --title "Installation Abort" \
+	bsddialog --backtitle "Indywall Installer" --title "Installation Abort" \
 	    --no-label "Abort" --yes-label "Continue" --yesno \
 	    "An installation error occurred. Would you like to attempt to continue the installation anyway?" 0 0
 
@@ -52,7 +52,7 @@ fatal()
 
 progress()
 {
-	bsddialog --backtitle "OPNsense Installer" \
+	bsddialog --backtitle "Indywall Installer" \
 	    --title "Installation Progress" \
 	    --mixedgauge "" 0 0 ${ALL} -- \
 	    "Cloning current system"    "${CPDUP}" \
