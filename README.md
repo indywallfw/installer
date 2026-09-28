@@ -1,11 +1,50 @@
-OPNsense installer
+Indywall installer
 ==================
 
-A scriptable replacement for bsdinstaller based on bsdinstall using
-cpdup utility to be able to clone a live system.
+The installer for the Indywall firewall: a scriptable replacement for
+bsdinstaller, based on bsdinstall, that uses the cpdup utility to clone
+the running live system onto the target disk.
 
-The repository holds our script adjustments which are workflow and
-branding related, but plug seamlessly into the base directory.
+The scripts plug into the base system's bsdinstall directory and adjust
+its workflow and branding for Indywall. Every dialog is titled "Indywall
+Installer".
 
-The "opnsense-installer" script will still offer a launchpad for
-the internals from the core package side.
+Final configuration
+-------------------
+
+After the system is copied, the Final Configuration menu offers:
+
+- **Root Password**: set the password of the system management account.
+- **Host Name**: name the system (default `Indywall.internal`), shown in
+  the web GUI as `root@<host>.<domain>` (`opnsense-hostname.sh`).
+- **GeoIP Database**: enter a MaxMind GeoLite2 account ID and license key
+  for country blocking (`opnsense-geoip.sh`). The Indywall plugin then
+  downloads the database at first boot and keeps it current daily.
+- **Complete Install**: confirm and exit.
+
+The scripts keep their `opnsense-*` file names so the rest of the system
+(core's `opnsense-installer` launcher, bsdinstall) finds them unchanged.
+
+How the image uses this repository
+----------------------------------
+
+The Indywall image installs this code as the `opnsense-installer` package,
+built by the `opnsense/installer` port in
+[indywallfw/ports](https://github.com/indywallfw/ports). The port pins a
+commit of this repository (`GH_TAGNAME`), so a change here reaches the
+image only after the port is updated:
+
+1. Merge the change into `master` here.
+2. In the ports repository, set `GH_TAGNAME` in `opnsense/installer/Makefile`
+   to the new commit and regenerate `distinfo` (`make makesum`).
+3. When a script is added or removed, update `opnsense/installer/pkg-plist`
+   as well; files missing from it are silently left out of the package.
+
+A new script also needs an entry in `src/Makefile` (`SCRIPTS`).
+
+Origin
+------
+
+Indywall is built on [OPNsense](https://opnsense.org). This repository is a
+fork of [opnsense/installer](https://github.com/opnsense/installer) and
+remains available under the BSD 2-clause license in `LICENSE`.
