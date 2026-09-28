@@ -41,7 +41,7 @@ opnsense_check_memory()
 	MEM_MIN=$((3 * 1000)) # a little lower to account for missing pages
 
 	if [ ${MEM} -lt ${MEM_MIN} ]; then
-		if ! bsddialog --backtitle "OPNsense Installer" --title "${TYPE} Configuration" \
+		if ! bsddialog --backtitle "Indywall Installer" --title "${TYPE} Configuration" \
 		    --yes-label "Proceed anyway" --no-label "Cancel" --yesno \
 		    "The installer detected only ${MEM}MB of RAM. Since\n
 this is a live image, copying the full file system\n
@@ -109,13 +109,13 @@ opnsense_load_disks()
 
 opnsense_info()
 {
-	bsddialog --backtitle "OPNsense Installer" --title "${1}" \
+	bsddialog --backtitle "Indywall Installer" --title "${1}" \
 	    --msgbox "${2}" 0 0
 }
 
 opnsense_fatal()
 {
-	bsddialog --backtitle "OPNsense Installer" --title "${1}" \
+	bsddialog --backtitle "Indywall Installer" --title "${1}" \
 	    --ok-label "Cancel" --msgbox "${2}" 0 0
 	exit 1
 }

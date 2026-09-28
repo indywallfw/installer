@@ -31,7 +31,7 @@ opnsense_load_disks
 [ -z "${OPNSENSE_SDISKS}${OPNSENSE_SPOOLS}" ] && opnsense_fatal "Import Configuration" "No suitable disks found in the system"
 
 exec 5>&1
-DISK=`echo ${OPNSENSE_SDISKS} ${OPNSENSE_SPOOLS} | xargs -o bsddialog --backtitle "OPNsense Installer" \
+DISK=`echo ${OPNSENSE_SDISKS} ${OPNSENSE_SPOOLS} | xargs -o bsddialog --backtitle "Indywall Installer" \
 	--title "Import Configuration" --cancel-label "Cancel" \
 	--menu "Please select a disk to continue." \
 	0 0 0 2>&1 1>&5` || exit 1

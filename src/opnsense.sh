@@ -56,7 +56,7 @@ msg_auto_zfs="Auto (ZFS)"
 msg_auto_zfs_desc="Guided Root-on-ZFS"
 msg_auto_zfs_help="Choose which disk to setup using ZFS and standard partition layout"
 msg_exit="Exit"
-msg_freebsd_installer="$OSNAME Installer"
+msg_freebsd_installer="Indywall Installer"
 msg_gpt_active_fix="Your hardware is known to have issues booting in CSM/Legacy/BIOS mode from GPT partitions that are not set active. Would you like the installer to apply this workaround for you?"
 msg_lenovo_fix="Your model of Lenovo is known to have a BIOS bug that prevents it booting from GPT partitions without UEFI. Would you like the installer to apply a workaround for you?"
 msg_manual="Manual"
@@ -189,7 +189,7 @@ mkdir $BSDINSTALL_TMPETC
 # Ensure we have at least about 256 MiB (with an allowance for rounding etc.).
 physmem=$(($(sysctl -n hw.physmem) / 1048576))
 if [ $physmem -lt 200 ]; then
-	 bsddialog --backtitle "$OSNAME Installer" --title "Warning" \
+	 bsddialog --backtitle "Indywall Installer" --title "Warning" \
 	    --msgbox "Insufficient physical memory (${physmem} MiB) detected. At least 256 MiB is recommended. The installer or installed system may not function correctly." 0 0
 fi
 
@@ -326,7 +326,7 @@ ${CHOICESZFS}\"Install (UFS)\" \"UFS GPT/UEFI Hybrid\" \
 while :; do
 
 exec 5>&1
-CHOICE=`echo ${CHOICES} | xargs -o bsddialog --backtitle "OPNsense Installer" \
+CHOICE=`echo ${CHOICES} | xargs -o bsddialog --backtitle "Indywall Installer" \
 	--title "${PRODUCT_NAME} ${PRODUCT_VERSION}" --cancel-label "Exit" \
 	--menu "Choose one of the following tasks to perform." \
 	0 0 0 2>&1 1>&5` || exit 1
@@ -347,7 +347,7 @@ case "${CHOICE}" in
 	;;
 "Other Modes >>")
 	exec 5>&1
-	PARTMODE=`echo ${PMODES} | xargs -o bsddialog --backtitle "OPNsense Installer" \
+	PARTMODE=`echo ${PMODES} | xargs -o bsddialog --backtitle "Indywall Installer" \
 	--title "Select Task" --cancel-label "Back" \
 	--menu "Choose one of the following tasks to perform." \
 	0 0 0 2>&1 1>&5` || PARTMODE=Exit
@@ -413,7 +413,7 @@ trap true SIGINT	# This section is optional
 
 finalconfig() {
 	exec 5>&1
-	REVISIT=$(bsddialog --backtitle "OPNsense Installer" \
+	REVISIT=$(bsddialog --backtitle "Indywall Installer" \
 	    --title "Final Configuration" --no-cancel --menu \
 	    "Setup of your ${PRODUCT_NAME} system is nearly complete." 0 0 0 \
 		"Root Password" "Change root password" \
@@ -458,7 +458,7 @@ f_dprintf "Installation Completed at %s" "$( date )"
 
 powerconfig() {
 	exec 5>&1
-	REVISIT=$(bsddialog --backtitle "OPNsense Installer" \
+	REVISIT=$(bsddialog --backtitle "Indywall Installer" \
 	    --title "Installation Complete" --no-cancel --menu \
 	    "The system may boot back into the installation media when not ejected properly." 0 0 0 \
 		"Reboot now" "Reboot system" \
