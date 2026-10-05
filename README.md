@@ -20,6 +20,11 @@ After the system is copied, the Final Configuration menu offers:
 - **GeoIP Database**: enter a MaxMind GeoLite2 account ID and license key
   for country blocking (`opnsense-geoip.sh`). The Indywall plugin then
   downloads the database at first boot and keeps it current daily.
+- **License Key**: enter the customer's Indywall license key
+  (`opnsense-license.sh`). It is stored in the installed system; the
+  Indywall plugin activates it with the license server as soon as the
+  system is online at first boot. It can also be entered later on the
+  Indywall: License page.
 - **Complete Install**: confirm and exit.
 
 The scripts keep their `opnsense-*` file names so the rest of the system

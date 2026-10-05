@@ -419,6 +419,7 @@ finalconfig() {
 		"Root Password" "Change root password" \
 		"Host Name" "Name of this system (default Indywall)" \
 		"GeoIP Database" "MaxMind key for country blocking" \
+		"License Key" "Indywall license key (activated online)" \
 		"Complete Install" "Confirm and exit" 2>&1 1>&5)
 	exec 5>&-
 
@@ -433,6 +434,10 @@ finalconfig() {
 		;;
 	"GeoIP Database")
 		bsdinstall opnsense-geoip
+		finalconfig
+		;;
+	"License Key")
+		bsdinstall opnsense-license
 		finalconfig
 		;;
 	esac
