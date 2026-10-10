@@ -177,7 +177,7 @@ f_dprintf "Began Installation at %s" "$( date )"
 environment_save
 
 PRODUCT_NAME=$(opnsense-version -N)
-PRODUCT_VERSION=$(opnsense-version -V)
+PRODUCT_VERSION=$(opnsense-version -v)
 
 rm -rf $BSDINSTALL_TMPETC
 mkdir $BSDINSTALL_TMPETC
