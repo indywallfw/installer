@@ -24,32 +24,49 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
+TITLE="Set Password"
 PASS1=$(mktemp /tmp/passwd.XXXXXX)
 PASS2=$(mktemp /tmp/passwd.XXXXXX)
-PASSIN=
-PASSOK=
 
-while [ -z "${PASSIN}" ]; do
-	if ! bsddialog --backtitle "Indywall Installer" --title "Set Password" --clear --insecure "${@}" \
+# the default root password of a new system ("indywall") is public, and so
+# is OPNsense's; neither may stay on an installed firewall
+MINLEN=8
+
+notice()
+{
+	bsddialog --backtitle "Indywall Installer" --title "${TITLE}" "${@}" \
+	    --ok-label "Back" --msgbox "${NOTICE}" 6 50
+}
+
+while :; do
+	if ! bsddialog --backtitle "Indywall Installer" --title "${TITLE}" --clear --insecure "${@}" \
 	    --passwordbox "Please select a password for the\nsystem management account (root):" 9 40 2> ${PASS1}; then
-	    exit 0
+		break
 	fi
 	PASSIN=$(cat ${PASS1})
-done
-
-while [ -z "${PASSOK}" ]; do
-	if ! bsddialog --backtitle "Indywall Installer" --title "Set Password" --clear --insecure "${@}" \
-	    --passwordbox "Please confirm the password for the\nsystem management account (root):" 9 40 2> ${PASS2}; then
-	    exit 0
+	if [ ${#PASSIN} -lt ${MINLEN} ]; then
+		NOTICE="The password needs at least ${MINLEN} characters."
+		notice "${@}"
+		continue
 	fi
-	PASSOK=$(cat ${PASS2})
-done
-
-if diff -q ${PASS1} ${PASS2}; then
+	case "${PASSIN}" in
+	indywall|opnsense)
+		NOTICE="\"${PASSIN}\" is a default password. Choose another."
+		notice "${@}"
+		continue
+		;;
+	esac
+	if ! bsddialog --backtitle "Indywall Installer" --title "${TITLE}" --clear --insecure "${@}" \
+	    --passwordbox "Please confirm the password for the\nsystem management account (root):" 9 40 2> ${PASS2}; then
+		continue
+	fi
+	if ! diff -q ${PASS1} ${PASS2} > /dev/null; then
+		NOTICE="The entered passwords did not match."
+		notice "${@}"
+		continue
+	fi
 	((cat ${PASS1}; echo) | chroot ${BSDINSTALL_CHROOT} /usr/local/sbin/opnsense-shell password root -h 0 > /dev/null)
-else
-	bsddialog --backtitle "Indywall Installer" --title "Set Password" "${@}" \
-	    --ok-label "Back" --msgbox "The entered passwords did not match." 5 40
-fi
+	break
+done
 
 rm -f /tmp/passwd.*

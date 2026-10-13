@@ -411,12 +411,27 @@ bsdinstall bootconfig || error "Failed to configure bootloader"
 
 trap true SIGINT	# This section is optional
 
+# root still has the public default password of a new system ("indywall");
+# a configuration imported earlier keeps its own password and passes
+rootpass_default() {
+	[ "$(echo '<?php $c = simplexml_load_file("/conf/config.xml");
+	    foreach ($c->system->user as $u) {
+		if ((string)$u->uid === "0") {
+		    echo password_verify("indywall", (string)$u->password) ? "default" : "set";
+		}
+	    }' | chroot ${BSDINSTALL_CHROOT} /usr/local/bin/php 2> /dev/null)" = "default" ]
+}
+
 finalconfig() {
+	ROOTPASS="Change root password"
+	if rootpass_default; then
+		ROOTPASS="Set root password (required)"
+	fi
 	exec 5>&1
 	REVISIT=$(bsddialog --backtitle "Indywall Installer" \
 	    --title "Final Configuration" --no-cancel --menu \
 	    "Setup of your ${PRODUCT_NAME} system is nearly complete." 0 0 0 \
-		"Root Password" "Change root password" \
+		"Root Password" "${ROOTPASS}" \
 		"Host Name" "Name of this system (default Indywall)" \
 		"GeoIP Database" "MaxMind key for country blocking" \
 		"License Key" "Indywall license key (activated online)" \
@@ -440,8 +455,21 @@ finalconfig() {
 		bsdinstall opnsense-license
 		finalconfig
 		;;
+	"Complete Install")
+		if rootpass_default; then
+			bsddialog --backtitle "Indywall Installer" --title "Root Password" \
+			    --msgbox "Set a root password before completing the installation:\nthe default password is publicly known." 7 62
+			bsdinstall opnsense-rootpass
+			finalconfig
+		fi
+		;;
 	esac
 }
+
+# a new system must not keep the default root password, so ask right away
+if rootpass_default; then
+	bsdinstall opnsense-rootpass
+fi
 
 # Allow user to change his mind
 finalconfig
