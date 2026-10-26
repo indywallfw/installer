@@ -1,0 +1,215 @@
+#!/usr/libexec/atf-sh
+
+# Copyright (c) 2026 Indywall
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+# src/opnsense-license.sh and src/opnsense-geoip.sh: the key steps hand
+# the key to a setup script of the installed system (the key's format is
+# checked there, not in the installer). The fake setup scripts record
+# their arguments and stdin; the license one accepts IW-GOOD-KEY only.
+
+LICENSE_SETUP=/usr/local/opnsense/scripts/indywall/license_setup.php
+GEOIP_SETUP=/usr/local/opnsense/scripts/indywall/geoip_setup.php
+
+license_setup()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	fake_program ${LICENSE_SETUP} '
+echo "$*" >> ${STUB}/setup.args
+KEY=$(cat)
+printf "%s\n" "${KEY}" >> ${STUB}/setup.stdin
+if [ "${KEY}" = IW-GOOD-KEY ]; then
+	echo "License key stored; it is activated at first boot."
+	exit 0
+fi
+echo "Invalid license key format." >&2
+exit 1'
+}
+
+geoip_setup()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	fake_program ${GEOIP_SETUP} '
+echo "$*" >> ${STUB}/setup.args
+cat > ${STUB}/setup.stdin
+echo "GeoIP credentials stored."'
+}
+
+atf_test_case license_no_licensing
+license_no_licensing_head()
+{
+	atf_set descr "an image without the license setup says so and asks nothing"
+}
+license_no_licensing_body()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	run_script opnsense-license
+	atf_check_equal 0 $?
+	dialogs --msgbox > msg
+	atf_check -o match:'This image has no Indywall licensing\.' cat msg
+	atf_check_equal 0 $(dialogs --inputbox | wc -l)
+}
+
+atf_test_case license_store
+license_store_head()
+{
+	atf_set descr "the key is handed to the setup script on stdin, never as an argument"
+}
+license_store_body()
+{
+	license_setup
+	answer "0|IW-GOOD-KEY"
+	run_script opnsense-license
+	atf_check_equal 0 $?
+	atf_check -o inline:'--key-stdin\n' cat ${STUB}/setup.args
+	atf_check -o inline:'IW-GOOD-KEY\n' cat ${STUB}/setup.stdin
+	atf_check -s exit:1 grep -F IW-GOOD-KEY ${STUB}/chroot.log
+	dialogs --msgbox > msg
+	atf_check -o match:'License key stored; it is activated at first boot\.' cat msg
+}
+
+atf_test_case license_retry
+license_retry_head()
+{
+	atf_set descr "a refused key shows the setup script's message and is asked again, prefilled"
+}
+license_retry_body()
+{
+	license_setup
+	answer "0|IW-TYPO" "0|IW-GOOD-KEY"
+	run_script opnsense-license
+	atf_check_equal 0 $?
+	atf_check -o inline:'IW-TYPO\nIW-GOOD-KEY\n' cat ${STUB}/setup.stdin
+	dialogs --msgbox > msg
+	atf_check -o match:'\|--ok-label\|Back\|--msgbox\|Invalid license key format\.\|' sed -n 1p msg
+	atf_check -o match:'License key stored' sed -n 2p msg
+	dialogs --inputbox | sed -n 2p > second
+	atf_check -o match:'\|12\|60\|IW-TYPO$' cat second
+}
+
+atf_test_case license_cancel
+license_cancel_head()
+{
+	atf_set descr "Cancel skips the key: nothing is stored"
+}
+license_cancel_body()
+{
+	license_setup
+	answer "1|"
+	run_script opnsense-license
+	atf_check_equal 0 $?
+	atf_check -s exit:1 test -e ${STUB}/setup.args
+	# cancelling after a refused key stores nothing either
+	rm -f ${STUB}/answers.n
+	: > ${STUB}/answers
+	answer "0|IW-BAD" "1|"
+	run_script opnsense-license
+	atf_check_equal 0 $?
+	atf_check -o inline:'IW-BAD\n' cat ${STUB}/setup.stdin
+}
+
+atf_test_case license_key_with_spaces
+license_key_with_spaces_head()
+{
+	atf_set descr "the key reaches the setup script exactly as typed"
+}
+license_key_with_spaces_body()
+{
+	license_setup
+	answer "0| IW-GOOD-KEY ; \$(id)"
+	run_script opnsense-license
+	printf '%s\n' ' IW-GOOD-KEY ; $(id)' > want
+	atf_check -o inline:'--key-stdin\n' cat ${STUB}/setup.args
+	atf_check -o file:want cat ${STUB}/setup.stdin
+}
+
+atf_test_case geoip_no_plugin
+geoip_no_plugin_head()
+{
+	atf_set descr "an image without the Indywall plugin says so and asks nothing"
+}
+geoip_no_plugin_body()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	run_script opnsense-geoip
+	atf_check_equal 0 $?
+	dialogs --msgbox > msg
+	atf_check -o match:'The Indywall plugin is not part of this image\.' cat msg
+}
+
+atf_test_case geoip_store
+geoip_store_head()
+{
+	atf_set descr "account and key are required; the key goes through stdin"
+}
+geoip_store_body()
+{
+	geoip_setup
+	answer "0|" "0|123456" "0|" "0|s3cr3t_KEY"
+	run_script opnsense-geoip
+	atf_check_equal 0 $?
+	atf_check -o inline:'--account 123456 --key-stdin --no-download\n' cat ${STUB}/setup.args
+	atf_check -o inline:'s3cr3t_KEY\n' cat ${STUB}/setup.stdin
+	atf_check -s exit:1 grep -F s3cr3t_KEY ${STUB}/chroot.log
+	atf_check_equal 2 $(dialogs --inputbox | wc -l)
+	atf_check_equal 2 $(dialogs --passwordbox | wc -l)
+	dialogs --msgbox > msg
+	atf_check -o match:'GeoIP credentials stored\.' cat msg
+}
+
+atf_test_case geoip_cancel
+geoip_cancel_head()
+{
+	atf_set descr "Cancel at the account or the key stores nothing"
+}
+geoip_cancel_body()
+{
+	geoip_setup
+	answer "1|"
+	run_script opnsense-geoip
+	atf_check_equal 0 $?
+	rm -f ${STUB}/answers.n
+	: > ${STUB}/answers
+	answer "0|123456" "1|"
+	run_script opnsense-geoip
+	atf_check_equal 0 $?
+	atf_check -s exit:1 test -e ${STUB}/setup.args
+}
+
+atf_init_test_cases()
+{
+	atf_add_test_case license_no_licensing
+	atf_add_test_case license_store
+	atf_add_test_case license_retry
+	atf_add_test_case license_cancel
+	atf_add_test_case license_key_with_spaces
+	atf_add_test_case geoip_no_plugin
+	atf_add_test_case geoip_store
+	atf_add_test_case geoip_cancel
+}

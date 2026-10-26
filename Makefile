@@ -18,3 +18,15 @@ mnt:
 	chflags -R noschg /mnt
 	rm -rf /mnt
 	mkdir -p /mnt
+
+# unit tests in tests/ (Kyua/ATF; no src/*.sh is named test)
+test:
+	@RESULTS=$$(mktemp -d -t installer-test); \
+	if (cd ${.CURDIR}/tests && kyua test --results-file=$${RESULTS}/results.db); then \
+	    rm -rf $${RESULTS}; \
+	else \
+	    kyua report --verbose --results-file=$${RESULTS}/results.db; \
+	    rm -rf $${RESULTS}; exit 1; \
+	fi
+
+.PHONY: test

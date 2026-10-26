@@ -1,0 +1,258 @@
+#!/usr/libexec/atf-sh
+
+# Copyright (c) 2026 Indywall
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+# src/opnsense.subr.sh, sourced in a subshell with stubs for sysctl (memory),
+# find, diskinfo and dmesg (disks) and the ZFS importer (pools).
+# (opnsense_load_disks writes /tmp/diskinfo.tmp, as on the installer image.)
+
+subr_setup()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	mkdir -p ${STUB}/disks
+	cat > ${WORK}/bin/find <<'EOF'
+#!/bin/sh
+# the device scan of opnsense_load_disks: answer from stub/devices
+if [ "$*" = "/dev -d 1 ! -type d" ]; then
+	cat ${STUB}/devices
+	exit 0
+fi
+exec /usr/bin/find "$@"
+EOF
+	cat > ${WORK}/bin/diskinfo <<'EOF'
+#!/bin/sh
+# diskinfo <dev>: "<dev> <sectorsize> <mediasize> ..." for the disks in stub/disks
+echo "${1}" >> ${STUB}/diskinfo.log
+[ -f ${STUB}/disks/${1} ] || { echo "diskinfo: ${1}: No such file or directory" >&2; exit 1; }
+printf '%s\t512\t%s\t%s\t0\t0\t0\n' "${1}" "$(cat ${STUB}/disks/${1})" "$(($(cat ${STUB}/disks/${1}) / 512))"
+EOF
+	cat > ${WORK}/bin/dmesg <<'EOF'
+#!/bin/sh
+cat ${STUB}/dmesg 2> /dev/null
+EOF
+	cat > ${WORK}/bin/importer <<'EOF'
+#!/bin/sh
+[ "$*" = "-z" ] || exit 1
+cat ${STUB}/pools 2> /dev/null
+EOF
+	chmod +x ${WORK}/bin/*
+}
+
+# in_subr <commands>: run commands with opnsense.subr.sh sourced, in a subshell
+in_subr()
+{
+	sh -c ". ${SRC}/opnsense.subr.sh; OPNSENSE_IMPORTER=${WORK}/bin/importer; ${1}" \
+	    > ${WORK}/subr.out 2> ${WORK}/subr.err
+}
+
+GIB=$((1024 * 1024 * 1024))
+MIB=$((1024 * 1024))
+
+atf_test_case sizes
+sizes_head()
+{
+	atf_set descr "the partition size constants"
+}
+sizes_body()
+{
+	subr_setup
+	in_subr 'echo ${SIZE_BOOT} ${SIZE_EFI} ${SIZE_MIN} ${SIZE_SWAP} ${SIZE_SWAPMIN} ${OPNSENSE_IMPORTER}'
+	atf_check -o inline:"524288 272629760 $((4 * GIB)) $((8 * GIB)) $((30 * GIB)) ${WORK}/bin/importer\n" cat subr.out
+}
+
+atf_test_case memory_enough
+memory_enough_head()
+{
+	atf_set descr "with 3000 MB of RAM or more nothing is asked"
+}
+memory_enough_body()
+{
+	subr_setup
+	for MEM in $((3000 * MIB)) $((4 * GIB)) $((64 * GIB)); do
+		export FAKE_REALMEM=${MEM}
+		in_subr 'opnsense_check_memory UFS; echo continued'
+		atf_check -o inline:'continued\n' cat subr.out
+	done
+	atf_check_equal 0 $(wc -l < ${STUB}/bsddialog.log)
+}
+
+atf_test_case memory_low_proceed
+memory_low_proceed_head()
+{
+	atf_set descr "below 3000 MB the installer warns; Proceed anyway continues"
+}
+memory_low_proceed_body()
+{
+	subr_setup
+	export FAKE_REALMEM=$((3000 * MIB - 1))
+	answer "0|"
+	in_subr 'opnsense_check_memory ZFS; echo continued'
+	atf_check -o inline:'continued\n' cat subr.out
+	atf_check -o match:'\|--title\|ZFS Configuration\|' -o match:'\|--yes-label\|Proceed anyway\|--no-label\|Cancel\|--yesno\|' \
+	    -o match:'detected only 2999MB of RAM' -o match:'at least 3000MB' cat ${STUB}/bsddialog.log
+}
+
+atf_test_case memory_low_cancel
+memory_low_cancel_head()
+{
+	atf_set descr "below 3000 MB, Cancel ends the step with exit status 1"
+}
+memory_low_cancel_body()
+{
+	subr_setup
+	export FAKE_REALMEM=$((2 * GIB))
+	answer "1|"
+	in_subr 'opnsense_check_memory UFS; echo continued'
+	atf_check_equal 1 $?
+	atf_check -o empty cat subr.out
+	atf_check -o match:'detected only 2048MB of RAM' cat ${STUB}/bsddialog.log
+}
+
+load_disks_fixture()
+{
+	cat > ${STUB}/devices <<'EOF'
+/dev/ada0
+/dev/ada0p1
+/dev/ada0p2
+/dev/ada1
+/dev/cd0
+/dev/console
+/dev/da10
+/dev/null
+/dev/nvd0
+/dev/nvme0
+/dev/pass0
+/dev/ttyu0
+/dev/ttyv0
+/dev/vtbd0
+/dev/gpt/rootfs
+EOF
+	# media sizes in bytes; ada0p1 and ttyu0 answer too, the name filter
+	# must leave them out; cd0, nvme0, pass0 are no disks for diskinfo
+	echo $((32 * GIB)) > ${STUB}/disks/ada0
+	echo $((1 * GIB)) > ${STUB}/disks/ada0p1
+	echo 500107862016 > ${STUB}/disks/ada1
+	echo $((16 * GIB)) > ${STUB}/disks/da10
+	echo $((256 * GIB)) > ${STUB}/disks/nvd0
+	echo 1024 > ${STUB}/disks/ttyu0
+	echo $((20 * GIB)) > ${STUB}/disks/vtbd0
+	cat > ${STUB}/dmesg <<'EOF'
+ada0 at ahcich0 bus 0 scbus0 target 0 lun 0
+ada0: <VBOX HARDDISK 1.0> ATA-6 SATA 2.x device
+ada0: Serial Number VB1234-5678
+ada0: <VBOX HARDDISK 1.0> ATA-6 SATA 2.x device
+ada1: <Samsung SSD 870 EVO 500GB SVT01B6Q> ACS-4 ATA SATA 3.x device
+nvd0: <WD Blue SN570 1TB (it's "fast")> NVMe namespace
+vtbd0: <VirtIO Block Adapter> on virtio_pci2
+vtbd0: 20480MB (41943040 512 byte sectors)
+EOF
+}
+
+atf_test_case load_disks
+load_disks_head()
+{
+	atf_set descr "opnsense_load_disks lists whole disks with their name and size for the menu"
+}
+load_disks_body()
+{
+	subr_setup
+	load_disks_fixture
+	in_subr 'opnsense_load_disks; echo "[${OPNSENSE_DISKS}]"; printf "%s" "${OPNSENSE_SDISKS}"; echo "${ada0_size} ${da10_name}"'
+	atf_check_equal 0 $?
+	cat > want <<EOF
+[ ada0 ada1 da10 nvd0 vtbd0]
+"ada0" "<VBOX HARDDISK 10> (32GB)"
+"ada1" "<Samsung SSD 870 EVO 500GB SVT01B6Q> (465GB)"
+"da10" "<Unknown disk> (16GB)"
+"nvd0" "<WD Blue SN570 1TB its fast> (256GB)"
+"vtbd0" "<VirtIO Block Adapter> (20GB)"
+$((32 * GIB)) Unknown disk
+EOF
+	atf_check -o file:want cat subr.out
+	# partitions, terminals and other nodes are not even asked about
+	atf_check -s exit:1 -o empty grep -Ex 'ada0p1|ada0p2|ttyu0|ttyv0|console|null|gpt/rootfs' ${STUB}/diskinfo.log
+}
+
+atf_test_case load_disks_none
+load_disks_none_head()
+{
+	atf_set descr "no disks and no pools give empty menus"
+}
+load_disks_none_body()
+{
+	subr_setup
+	printf '/dev/null\n/dev/cd0\n' > ${STUB}/devices
+	in_subr 'opnsense_load_disks; echo "[${OPNSENSE_DISKS}][${OPNSENSE_SDISKS}][${OPNSENSE_POOLS}][${OPNSENSE_SPOOLS}]"'
+	atf_check -o inline:'[][][][]\n' cat subr.out
+}
+
+atf_test_case load_pools
+load_pools_head()
+{
+	atf_set descr "opnsense_load_disks lists the ZFS pools the importer finds"
+}
+load_pools_body()
+{
+	subr_setup
+	: > ${STUB}/devices
+	printf 'zroot 1234567890123 31.5G\ntank 42 1.8T\n' > ${STUB}/pools
+	in_subr 'opnsense_load_disks; echo "[${OPNSENSE_POOLS}]"; printf "%s" "${OPNSENSE_SPOOLS}"'
+	cat > want <<'EOF'
+[ zroot tank]
+"zroot" "<1234567890123> (31.5G)"
+"tank" "<42> (1.8T)"
+EOF
+	atf_check -o file:want cat subr.out
+}
+
+atf_test_case info_and_fatal
+info_and_fatal_head()
+{
+	atf_set descr "opnsense_info shows a message and returns, opnsense_fatal exits 1"
+}
+info_and_fatal_body()
+{
+	subr_setup
+	in_subr 'opnsense_info "Title" "Some text"; echo after'
+	atf_check -o inline:'after\n' cat subr.out
+	in_subr 'opnsense_fatal "Oops" "Broken"; echo after'
+	atf_check_equal 1 $?
+	atf_check -o empty cat subr.out
+	atf_check -o match:'\|--title\|Oops\|--ok-label\|Cancel\|--msgbox\|Broken\|0\|0$' cat ${STUB}/bsddialog.log
+}
+
+atf_init_test_cases()
+{
+	atf_add_test_case sizes
+	atf_add_test_case memory_enough
+	atf_add_test_case memory_low_proceed
+	atf_add_test_case memory_low_cancel
+	atf_add_test_case load_disks
+	atf_add_test_case load_disks_none
+	atf_add_test_case load_pools
+	atf_add_test_case info_and_fatal
+}

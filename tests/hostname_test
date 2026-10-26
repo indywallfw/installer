@@ -1,0 +1,220 @@
+#!/usr/libexec/atf-sh
+
+# Copyright (c) 2026 Indywall
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+# src/opnsense-hostname.sh with stub dialogs and a fake php in the
+# installed system: called without arguments it prints the current
+# "hostname domain", called with "-- <host> <domain>" it records the save.
+
+hostname_setup()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	fake_program /usr/local/bin/php '
+if [ $# -eq 0 ]; then
+	cat > /dev/null
+	echo "${FAKE_CURRENT-Indywall internal}"
+	exit 0
+fi
+cat > ${STUB}/php.stdin
+echo "$*" >> ${STUB}/php.saved
+echo "The system is now named ${2}.${3}."'
+}
+
+# the host names (or domains) the script accepted: one per saved call
+saved()
+{
+	cat ${STUB}/php.saved 2> /dev/null
+}
+
+# try_host <name>: is <name> accepted as host name? (domain "internal")
+try_host()
+{
+	rm -f ${STUB}/answers.n ${STUB}/php.saved
+	: > ${STUB}/answers
+	answer "0|${1}" "0|internal"
+	run_script opnsense-hostname
+	[ "$(saved)" = "-- ${1} internal" ]
+}
+
+# try_domain <domain>: is <domain> accepted? (host name "fw")
+try_domain()
+{
+	rm -f ${STUB}/answers.n ${STUB}/php.saved
+	: > ${STUB}/answers
+	answer "0|fw" "0|${1}"
+	run_script opnsense-hostname
+	[ "$(saved)" = "-- fw ${1}" ]
+}
+
+LABEL63=abcdefghij0123456789abcdefghij0123456789abcdefghij0123456789abc
+
+atf_test_case save
+save_head()
+{
+	atf_set descr "a valid host name and domain are saved through the configuration class"
+}
+save_body()
+{
+	hostname_setup
+	answer "0|fw1" "0|example.com"
+	run_script opnsense-hostname
+	atf_check_equal 0 $?
+	atf_check -o inline:'-- fw1 example.com\n' cat ${STUB}/php.saved
+	atf_check -o match:"Config::getInstance" -o match:"save\(\['description' => 'Installer: host name set'\]\)" \
+	    cat ${STUB}/php.stdin
+	dialogs --msgbox > msg
+	atf_check -o match:'\|--msgbox\|The system is now named fw1\.example\.com\.\|' cat msg
+	# the values only reach php as arguments, never as PHP code
+	atf_check -s exit:1 grep -F fw1 ${STUB}/php.stdin
+}
+
+atf_test_case prefill
+prefill_head()
+{
+	atf_set descr "the dialogs start with the host name and domain of the installed system"
+}
+prefill_body()
+{
+	hostname_setup
+	export FAKE_CURRENT="gw corp.example"
+	answer "0|gw" "0|corp.example"
+	run_script opnsense-hostname
+	dialogs --inputbox > boxes
+	atf_check -o match:'\|Host name \(letters, digits and hyphens\):\|9\|56\|gw$' sed -n 1p boxes
+	atf_check -o match:'\|9\|56\|corp\.example$' sed -n 2p boxes
+}
+
+atf_test_case valid_host_names
+valid_host_names_head()
+{
+	atf_set descr "letters, digits and inner hyphens, 1 to 63 characters, are a host name"
+}
+valid_host_names_body()
+{
+	hostname_setup
+	for NAME in a fw1 FW-01 123 x-y-z ${LABEL63}; do
+		try_host ${NAME} || atf_fail "host name ${NAME} refused"
+	done
+}
+
+atf_test_case invalid_host_names
+invalid_host_names_head()
+{
+	atf_set descr "a bad host name is refused with a message and asked again with the bad value"
+}
+invalid_host_names_body()
+{
+	hostname_setup
+	for NAME in -fw fw- fw_1 fw.example "fw 1" "" "${LABEL63}d" "fw1;reboot" ä; do
+		: > ${STUB}/bsddialog.log
+		try_host "${NAME}" && atf_fail "host name '${NAME}' accepted"
+		# refused, then asked again (cancelled: no more answers) with the value typed
+		dialogs --msgbox > msg
+		atf_check -o match:"\"${NAME}\" is not a valid host name" cat msg
+		dialogs --inputbox | sed -n 2p > second
+		atf_check -o match:"\|9\|56\|${NAME}\$" cat second
+		atf_check -s exit:1 test -e ${STUB}/php.saved
+	done
+}
+
+atf_test_case valid_domains
+valid_domains_head()
+{
+	atf_set descr "one or more dot-separated host-name labels are a domain"
+}
+valid_domains_body()
+{
+	hostname_setup
+	for DOMAIN in internal example.com a.b.c.d corp-1.example.org ${LABEL63}.com; do
+		try_domain ${DOMAIN} || atf_fail "domain ${DOMAIN} refused"
+	done
+}
+
+atf_test_case invalid_domains
+invalid_domains_head()
+{
+	atf_set descr "a bad domain is refused with a message"
+}
+invalid_domains_body()
+{
+	hostname_setup
+	for DOMAIN in "" .com com. example..com -x.com x-.com "ex ample.com" ex_ample.com "${LABEL63}d.com"; do
+		: > ${STUB}/bsddialog.log
+		try_domain "${DOMAIN}" && atf_fail "domain '${DOMAIN}' accepted"
+		dialogs --msgbox > msg
+		atf_check -o match:"is not a valid domain" cat msg
+	done
+}
+
+atf_test_case retry_then_save
+retry_then_save_head()
+{
+	atf_set descr "after refused values the corrected ones are saved"
+}
+retry_then_save_body()
+{
+	hostname_setup
+	answer "0|bad_name" "0|-x" "0|fw2" "0|bad..domain" "0|example.net"
+	run_script opnsense-hostname
+	atf_check_equal 0 $?
+	atf_check -o inline:'-- fw2 example.net\n' cat ${STUB}/php.saved
+	# three refusals and the result
+	atf_check_equal 4 $(dialogs --msgbox | wc -l)
+}
+
+atf_test_case cancel
+cancel_head()
+{
+	atf_set descr "Cancel at either question leaves the configuration alone"
+}
+cancel_body()
+{
+	hostname_setup
+	answer "1|"
+	run_script opnsense-hostname
+	atf_check_equal 0 $?
+	atf_check -s exit:1 test -e ${STUB}/php.saved
+	rm -f ${STUB}/answers.n
+	: > ${STUB}/answers
+	answer "0|fw1" "1|"
+	run_script opnsense-hostname
+	atf_check_equal 0 $?
+	atf_check -s exit:1 test -e ${STUB}/php.saved
+	atf_check_equal 0 $(dialogs --msgbox | wc -l)
+}
+
+atf_init_test_cases()
+{
+	atf_add_test_case save
+	atf_add_test_case prefill
+	atf_add_test_case valid_host_names
+	atf_add_test_case invalid_host_names
+	atf_add_test_case valid_domains
+	atf_add_test_case invalid_domains
+	atf_add_test_case retry_then_save
+	atf_add_test_case cancel
+}
