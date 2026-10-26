@@ -1,0 +1,34 @@
+# Unit tests (make test: Kyua/ATF, both in the FreeBSD base) on FreeBSD 15.1
+# for every pull request and push to master and develop. Branch protection
+# makes the "unit" check required before merging; see TESTING.md.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [master, develop, 'stable/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: make test (FreeBSD 15.1)
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: '15.1'
+          usesh: true
+          run: |
+            make test

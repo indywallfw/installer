@@ -1,0 +1,161 @@
+#!/usr/libexec/atf-sh
+
+# Copyright (c) 2026 Indywall
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+# src/opnsense-rootpass.sh with stub dialogs and a fake opnsense-shell in
+# the installed system that records how it was called and what it read.
+# (The script keeps its answers in /tmp/passwd.XXXXXX and removes
+# /tmp/passwd.* at the end, as on the installer image.)
+
+rootpass_setup()
+{
+	. "$(atf_get_srcdir)/stubs.subr"
+	stub_setup
+	fake_program /usr/local/sbin/opnsense-shell '
+echo "$*" >> ${STUB}/shell.args
+cat > ${STUB}/shell.stdin'
+}
+
+atf_test_case set_password
+set_password_head()
+{
+	atf_set descr "a good password typed twice is set with opnsense-shell, through stdin"
+}
+set_password_body()
+{
+	rootpass_setup
+	answer "0|Corr3ct horse" "0|Corr3ct horse"
+	run_script opnsense-rootpass
+	atf_check_equal 0 $?
+	atf_check -o inline:'password root -h 0\n' cat ${STUB}/shell.args
+	atf_check -o inline:'Corr3ct horse\n' cat ${STUB}/shell.stdin
+	dialogs --passwordbox > boxes
+	atf_check_equal 2 $(wc -l < boxes)
+	atf_check -o match:'\|--insecure\|' cat boxes
+	atf_check_equal 0 $(dialogs --msgbox | wc -l)
+}
+
+atf_test_case minimum_length
+minimum_length_head()
+{
+	atf_set descr "a password needs 8 characters"
+}
+minimum_length_body()
+{
+	rootpass_setup
+	answer "0|" "0|1234567" "0|12345678" "0|12345678"
+	run_script opnsense-rootpass
+	dialogs --msgbox > msg
+	atf_check_equal 2 $(grep -c 'The password needs at least 8 characters\.' msg)
+	atf_check -o inline:'12345678\n' cat ${STUB}/shell.stdin
+}
+
+atf_test_case default_passwords
+default_passwords_head()
+{
+	atf_set descr "the public default passwords indywall and opnsense are refused"
+}
+default_passwords_body()
+{
+	rootpass_setup
+	answer "0|indywall" "0|opnsense" "0|indywall2026" "0|indywall2026"
+	run_script opnsense-rootpass
+	dialogs --msgbox > msg
+	atf_check -o match:'"indywall" is a default password\. Choose another\.' cat msg
+	atf_check -o match:'"opnsense" is a default password\. Choose another\.' cat msg
+	atf_check -o inline:'indywall2026\n' cat ${STUB}/shell.stdin
+}
+
+atf_test_case mismatch
+mismatch_head()
+{
+	atf_set descr "two different passwords are refused and both asked again"
+}
+mismatch_body()
+{
+	rootpass_setup
+	answer "0|password-one" "0|password-two" "0|password-two" "0|password-two"
+	run_script opnsense-rootpass
+	dialogs --msgbox > msg
+	atf_check -o match:'The entered passwords did not match\.' cat msg
+	atf_check -o inline:'password-two\n' cat ${STUB}/shell.stdin
+	atf_check_equal 1 $(wc -l < ${STUB}/shell.args)
+}
+
+atf_test_case cancel_first
+cancel_first_head()
+{
+	atf_set descr "Cancel at the first question sets nothing (opnsense.sh asks again while the default stays)"
+}
+cancel_first_body()
+{
+	rootpass_setup
+	answer "1|"
+	run_script opnsense-rootpass
+	atf_check_equal 0 $?
+	atf_check -s exit:1 test -e ${STUB}/shell.args
+}
+
+atf_test_case cancel_confirm
+cancel_confirm_head()
+{
+	atf_set descr "Cancel at the confirmation goes back to the first question"
+}
+cancel_confirm_body()
+{
+	rootpass_setup
+	answer "0|first-choice" "1|" "0|second-choice" "0|second-choice"
+	run_script opnsense-rootpass
+	atf_check -o inline:'second-choice\n' cat ${STUB}/shell.stdin
+	# password, cancelled confirmation, password, confirmation
+	atf_check_equal 4 $(dialogs --passwordbox | wc -l)
+}
+
+atf_test_case special_characters
+special_characters_head()
+{
+	atf_set descr "a password with shell and quoting characters arrives unchanged"
+}
+special_characters_body()
+{
+	rootpass_setup
+	PASS='$(id) `x` "q" '"'s'"' \n;|&*?'
+	answer "0|${PASS}" "0|${PASS}"
+	run_script opnsense-rootpass
+	printf '%s\n' "${PASS}" > want
+	atf_check -o file:want cat ${STUB}/shell.stdin
+}
+
+atf_init_test_cases()
+{
+	atf_add_test_case set_password
+	atf_add_test_case minimum_length
+	atf_add_test_case default_passwords
+	atf_add_test_case mismatch
+	atf_add_test_case cancel_first
+	atf_add_test_case cancel_confirm
+	atf_add_test_case special_characters
+}

@@ -1,0 +1,8 @@
+syntax(2)
+
+test_suite('indywall-installer')
+
+atf_test_program{name='hostname_test'}
+atf_test_program{name='license_test'}
+atf_test_program{name='rootpass_test'}
+atf_test_program{name='subr_test'}
