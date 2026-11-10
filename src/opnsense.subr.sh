@@ -119,3 +119,25 @@ opnsense_fatal()
 	    --ok-label "Cancel" --msgbox "${2}" 0 0
 	exit 1
 }
+
+# opnsense_rootpass_default: true while root of the installed system still
+# has the public default password of a new system ("indywall"); a
+# configuration imported earlier keeps its own password and is false.
+#
+# Only the account named root counts: since OPNsense 26.7.8 live mode adds
+# an "installer" account to the configuration, a copy of root with UID 0
+# (core rc.subr.d/livemode), and one answer per UID 0 account made the
+# result "defaultdefault", so the installer took the password as set.
+# Anything but a clear "set" asks, so a missing or broken configuration
+# never skips the question.
+opnsense_rootpass_default()
+{
+	[ "$(echo '<?php $c = @simplexml_load_file("/conf/config.xml");
+	    foreach (($c === false ? [] : $c->system->user) as $u) {
+		if ((string)$u->name === "root") {
+		    echo (string)$u->uid === "0" &&
+		        !password_verify("indywall", (string)$u->password) ? "set" : "default";
+		    break;
+		}
+	    }' | chroot ${BSDINSTALL_CHROOT} /usr/local/bin/php 2> /dev/null)" != "set" ]
+}

@@ -31,4 +31,6 @@ jobs:
           release: '15.1'
           usesh: true
           run: |
+            # php for the root password check (opnsense_rootpass_default)
+            env ASSUME_ALWAYS_YES=yes pkg install -y php85
             make test
