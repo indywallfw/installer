@@ -245,8 +245,125 @@ info_and_fatal_body()
 	atf_check -o match:'\|--title\|Oops\|--ok-label\|Cancel\|--msgbox\|Broken\|0\|0$' cat ${STUB}/bsddialog.log
 }
 
+# rootpass_setup: a php in the installed system that reads its
+# /conf/config.xml (the host's php, with the path moved under root/)
+rootpass_setup()
+{
+	subr_setup
+	PHP=$(command -v php) || atf_skip "php is needed (pkg install php85)"
+	HASH_DEFAULT=$(${PHP} -r 'echo password_hash("indywall", PASSWORD_BCRYPT);')
+	HASH_OWN=$(${PHP} -r 'echo password_hash("An0ther-pass", PASSWORD_BCRYPT);')
+	mkdir -p ${BSDINSTALL_CHROOT}/conf
+	fake_program /usr/local/bin/php "sed 's#\"/conf/config.xml\"#\"${BSDINSTALL_CHROOT}/conf/config.xml\"#' | ${PHP}"
+}
+
+# users <user xml>...: the installed system's config.xml with these users
+users()
+{
+	{
+		echo '<?xml version="1.0"?>'
+		echo '<opnsense><system>'
+		for U in "$@"; do
+			echo "${U}"
+		done
+		echo '</system></opnsense>'
+	} > ${BSDINSTALL_CHROOT}/conf/config.xml
+}
+
+# user <name> <uid> <hash>
+user()
+{
+	echo "<user><name>${1}</name><uid>${2}</uid><password>${3}</password></user>"
+}
+
+atf_test_case rootpass_default_new
+rootpass_default_new_head()
+{
+	atf_set descr "a new system (root with the default password) is default"
+}
+rootpass_default_new_body()
+{
+	rootpass_setup
+	users "$(user root 0 ${HASH_DEFAULT})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+}
+
+atf_test_case rootpass_default_installer_user
+rootpass_default_installer_user_head()
+{
+	atf_set descr "the installer account live mode adds (a UID 0 copy of root) does not hide the default password"
+}
+rootpass_default_installer_user_body()
+{
+	rootpass_setup
+	# OPNsense 26.7.8 live mode: root, then installer with root's hash
+	users "$(user root 0 ${HASH_DEFAULT})" "$(user installer 0 ${HASH_DEFAULT})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+	users "$(user installer 0 ${HASH_DEFAULT})" "$(user root 0 ${HASH_DEFAULT})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+}
+
+atf_test_case rootpass_default_imported
+rootpass_default_imported_head()
+{
+	atf_set descr "an imported configuration with its own root password is not default, with or without the installer account"
+}
+rootpass_default_imported_body()
+{
+	rootpass_setup
+	users "$(user root 0 ${HASH_OWN})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 1 $?
+	users "$(user root 0 ${HASH_OWN})" "$(user installer 0 ${HASH_OWN})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 1 $?
+}
+
+atf_test_case rootpass_default_other_user
+rootpass_default_other_user_head()
+{
+	atf_set descr "only root counts: another account with its own password does not make root's default password set"
+}
+rootpass_default_other_user_body()
+{
+	rootpass_setup
+	users "$(user installer 0 ${HASH_OWN})" "$(user root 0 ${HASH_DEFAULT})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+}
+
+atf_test_case rootpass_default_fail_closed
+rootpass_default_fail_closed_head()
+{
+	atf_set descr "no configuration, a broken one, no root account or no php: ask (default), never skip"
+}
+rootpass_default_fail_closed_body()
+{
+	rootpass_setup
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+	echo '<opnsense><system><user>' > ${BSDINSTALL_CHROOT}/conf/config.xml
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+	users "$(user admin 0 ${HASH_OWN})"
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+	users "$(user root 0 ${HASH_OWN})"
+	rm ${BSDINSTALL_CHROOT}/usr/local/bin/php
+	in_subr opnsense_rootpass_default
+	atf_check_equal 0 $?
+}
+
 atf_init_test_cases()
 {
+	atf_add_test_case rootpass_default_new
+	atf_add_test_case rootpass_default_installer_user
+	atf_add_test_case rootpass_default_imported
+	atf_add_test_case rootpass_default_other_user
+	atf_add_test_case rootpass_default_fail_closed
 	atf_add_test_case sizes
 	atf_add_test_case memory_enough
 	atf_add_test_case memory_low_proceed

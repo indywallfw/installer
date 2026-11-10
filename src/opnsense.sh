@@ -411,15 +411,10 @@ bsdinstall bootconfig || error "Failed to configure bootloader"
 
 trap true SIGINT	# This section is optional
 
-# root still has the public default password of a new system ("indywall");
-# a configuration imported earlier keeps its own password and passes
+# root still has the public default password of a new system ("indywall")
 rootpass_default() {
-	[ "$(echo '<?php $c = simplexml_load_file("/conf/config.xml");
-	    foreach ($c->system->user as $u) {
-		if ((string)$u->uid === "0") {
-		    echo password_verify("indywall", (string)$u->password) ? "default" : "set";
-		}
-	    }' | chroot ${BSDINSTALL_CHROOT} /usr/local/bin/php 2> /dev/null)" = "default" ]
+	# without the helper, ask (true) rather than skip the password
+	(. /usr/libexec/bsdinstall/opnsense.subr || exit 0; opnsense_rootpass_default)
 }
 
 finalconfig() {
